@@ -1,0 +1,31 @@
+# 项目内工具链、依赖及构建产物
+/.venv/
+/.platformio/
+/.pio/
+/build/
+
+# 临时分析、验证文件与自动生成的本机路径
+/temp/
+/compile_commands.json
+*.log
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+
+# 编辑器缓存与临时备份，保留可共享的 VS Code 工程配置
+.vscode/.browse.c_cpp.db*
+.vscode/ipch/
+*.swp
+*.swo
+*~
+
+# 本地环境配置，允许提交占位示例
+.env
+.env.*
+!.env.example
+
+# 操作系统生成的文件
+.DS_Store
+Thumbs.db
+Desktop.ini

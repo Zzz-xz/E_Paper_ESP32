@@ -1,0 +1,38 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "ESP32: Build",
+            "type": "shell",
+            "command": ".\\pio.cmd",
+            "args": ["run"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "ESP32: List serial ports",
+            "type": "shell",
+            "command": ".\\pio.cmd",
+            "args": ["device", "list"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": []
+        },
+        {
+            "label": "ESP32: Upload",
+            "type": "shell",
+            "command": ".\\pio.cmd",
+            "args": ["run", "--target", "upload"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "ESP32: Serial monitor",
+            "type": "shell",
+            "command": ".\\pio.cmd",
+            "args": ["device", "monitor", "--baud", "115200"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": []
+        }
+    ]
+}
