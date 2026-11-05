@@ -3,6 +3,11 @@
 /.platformio/
 /.pio/
 /build/
+/data/
+/web/node_modules/
+/web/dist/
+/web/*.tsbuildinfo
+.pytest_cache/
 
 # 临时分析、验证文件与自动生成的本机路径
 /temp/
