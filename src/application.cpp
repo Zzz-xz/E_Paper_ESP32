@@ -48,11 +48,16 @@ void execute_job(uint32_t now)
         fail_job("Device is cooling down; wait 30 seconds between refreshes.");
         return;
     }
-    if (!device_client::download(job, frame)) { fail_job("Frame download or validation failed."); return; }
+    const uint32_t started = millis();
+    String error;
+    if (!device_client::download(job, frame, error)) { fail_job(error.c_str()); return; }
+    Serial.printf("[epaper] Frame ready in %lu ms; requesting refresh.\n", static_cast<unsigned long>(millis() - started));
     if (!device_client::report(job.id, "refreshing")) return;
     has_refreshed = true;
     last_refresh = millis();
+    Serial.println("[epaper] Refresh started.");
     const bool complete = display_service::refresh(frame);
+    Serial.printf("[epaper] Panel refresh took %lu ms.\n", static_cast<unsigned long>(millis() - last_refresh));
     if (!complete) { fail_job("Display BUSY did not clear."); return; }
     if (device_client::report(job.id, "completed"))
         Serial.println("[epaper] Refresh sequence finished; display sleeping.");

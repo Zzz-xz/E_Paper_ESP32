@@ -314,6 +314,8 @@ void connection_succeeded(uint32_t now)
     attempts = 0;
     error_message = "";
     phase = Phase::Ready;
+    /** 联网工作台由 USB 供电，关闭调制解调器省电，避免收图等待唤醒。 */
+    if (!WiFi.setSleep(false)) Serial.println("[network] Cannot disable Wi-Fi sleep.");
     portal_close_at = now + 5000;
     Serial.println("[network] Wi-Fi connected; display service ready.");
 }

@@ -4,14 +4,21 @@
 #include <WiFi.h>
 #include <inttypes.h>
 #include "device_client.h"
+#include "frame_receiver.h"
 #include "network_config.h"
 
 namespace {
 constexpr uint8_t kAttempts = 3;
+constexpr int32_t kConnectTimeoutMs = 2000;
+constexpr uint16_t kRequestTimeoutMs = 3000;
+struct ReceiverClock {
+    uint32_t now() const { return millis(); }
+    void pause() const { delay(1); }
+};
 bool post_once(const String& path, const String& payload, String& response, int& status);
 device_client::Poll poll_once(device_client::Job& job, uint64_t& setup_id);
-bool download_once(const device_client::Job& job, epaper::Frame& frame);
-bool valid_frame(const epaper::Frame& frame, uint32_t expected);
+bool download_once(const device_client::Job& job, epaper::Frame& frame, String& error);
+bool valid_frame(const epaper::Frame& frame, uint32_t expected, String& error);
 String job_path(uint64_t id);
 }
 
@@ -26,11 +33,16 @@ device_client::Poll device_client::poll(Job& job, uint64_t& setup_id)
     return Poll::Error;
 }
 
-bool device_client::download(const Job& job, epaper::Frame& frame)
+bool device_client::download(const Job& job, epaper::Frame& frame, String& error)
 {
     for (uint8_t attempt = 0; attempt < kAttempts; ++attempt) {
-        if (download_once(job, frame)) return true;
-        delay(300);
+        const uint32_t started = millis();
+        const bool complete = download_once(job, frame, error);
+        Serial.printf("[http] Frame attempt %u: %s, %lu ms, RSSI %d dBm\n",
+                      static_cast<unsigned>(attempt + 1), complete ? "complete" : error.c_str(),
+                      static_cast<unsigned long>(millis() - started), WiFi.RSSI());
+        if (complete) return true;
+        if (attempt + 1 < kAttempts) delay(300);
     }
     Serial.println("[http] Frame download or validation failed.");
     return false;
@@ -85,8 +97,9 @@ bool post_once(const String& path, const String& payload, String& response, int&
     WiFiClient client;
     HTTPClient http;
     if (!http.begin(client, network_config::server_url() + path)) return false;
-    http.setConnectTimeout(3000);
-    http.setTimeout(5000);
+    http.setConnectTimeout(kConnectTimeoutMs);
+    http.setTimeout(kRequestTimeoutMs);
+    http.setReuse(false);
     http.addHeader("Content-Type", "application/json");
     status = http.POST(payload);
     const int length = http.getSize();
@@ -122,38 +135,50 @@ device_client::Poll poll_once(device_client::Job& job, uint64_t& setup_id)
     return device_client::Poll::Available;
 }
 
-bool download_once(const device_client::Job& job, epaper::Frame& frame)
+bool download_once(const device_client::Job& job, epaper::Frame& frame, String& error)
 {
     WiFiClient client;
     HTTPClient http;
-    if (!http.begin(client, network_config::server_url() + job_path(job.id) + "/frame")) return false;
-    http.setConnectTimeout(3000);
-    http.setTimeout(5000);
-    if (http.GET() != 200 || http.getSize() != static_cast<int>(frame.size())) { http.end(); return false; }
-    const uint32_t started = millis();
-    size_t offset = 0;
-    WiFiClient& stream = http.getStream();
-    while (offset < frame.size() && millis() - started < 10000) {
-        const size_t wanted = min(static_cast<size_t>(1024), frame.size() - offset);
-        const size_t received = stream.readBytes(frame.data() + offset, wanted);
-        if (!received) break;
-        offset += received;
+    if (!http.begin(client, network_config::server_url() + job_path(job.id) + "/frame")) {
+        error = "无法创建图片下载连接。";
+        return false;
     }
+    http.setConnectTimeout(kConnectTimeoutMs);
+    http.setTimeout(kRequestTimeoutMs);
+    http.setReuse(false);
+    const int status = http.GET();
+    const int length = http.getSize();
+    if (status != 200 || length != static_cast<int>(frame.size())) {
+        error = status != 200 ? "图片下载连接失败，HTTP " + String(status)
+                              : "图片长度错误：" + String(length) + "/30000 字节。";
+        http.end();
+        return false;
+    }
+    ReceiverClock clock;
+    const frame_receiver::Result result = frame_receiver::receive(http.getStream(), frame, clock);
     http.end();
-    return offset == frame.size() && valid_frame(frame, job.crc32);
+    if (result.status != frame_receiver::Status::Complete) {
+        error = String(result.status == frame_receiver::Status::Timeout ? "图片下载超时：" : "图片下载中断：") +
+                String(result.received) + "/30000 字节。";
+        return false;
+    }
+    return valid_frame(frame, job.crc32, error);
 }
 
 /** @brief 网络模块边界一次性校验长度、位面互斥和校验码，显示层直接消费合法帧。 */
-bool valid_frame(const epaper::Frame& frame, uint32_t expected)
+bool valid_frame(const epaper::Frame& frame, uint32_t expected, String& error)
 {
     uint32_t crc = 0xffffffffU;
     for (size_t index = 0; index < frame.size(); ++index) {
         crc ^= frame[index];
         for (uint8_t bit = 0; bit < 8; ++bit) crc = (crc >> 1) ^ (0xedb88320U & (0U - (crc & 1U)));
     }
-    if (~crc != expected) return false;
+    if (~crc != expected) { error = "图片 CRC32 校验失败，请重新发送。"; return false; }
     for (size_t index = 0; index < epaper::plane_bytes; ++index)
-        if (frame[index] & frame[index + epaper::plane_bytes]) return false;
+        if (frame[index] & frame[index + epaper::plane_bytes]) {
+            error = "图片黑色与红色位面重叠，请重新生成预览。";
+            return false;
+        }
     return true;
 }
 }

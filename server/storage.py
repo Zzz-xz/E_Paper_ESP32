@@ -8,6 +8,7 @@ from pathlib import Path
 from .models import COOLDOWN_SECONDS, DISPLAY_READ_COOLDOWN_SECONDS
 
 ACTIVE = {"queued", "downloading", "refreshing"}
+JOB_TIMEOUTS = {"queued": 15, "downloading": 45, "refreshing": 120}
 
 
 class DisplayReadCooling(Exception):
@@ -41,7 +42,10 @@ class JobStore:
             db.close()
 
     def _expire(self, db, now):
-        db.execute("UPDATE job SET state='failed', error='设备处理超时，请检查连接后重新发送。', updated=? WHERE state IN ('queued','downloading','refreshing') AND updated<?", (now, now - 120))
+        for state, seconds in JOB_TIMEOUTS.items():
+            db.execute("UPDATE job SET state='failed', error=?, updated=? WHERE state=? AND updated<?",
+                       ("设备" + {"queued": "接收任务", "downloading": "下载图片", "refreshing": "刷新屏幕"}[state] +
+                        "超时，请检查连接后重新发送。", now, state, now - seconds))
 
     def _cooldown(self, db, now):
         row = db.execute("SELECT value FROM meta WHERE key='cooldown_until'").fetchone()
@@ -82,7 +86,8 @@ class JobStore:
             row = db.execute("SELECT id,state FROM job").fetchone()
             if not row or row[1] not in {"queued", "downloading"}:
                 return None
-            db.execute("UPDATE job SET state='downloading', updated=?", (now,))
+            if row[1] == "queued":
+                db.execute("UPDATE job SET state='downloading', updated=?", (now,))
             return row[0]
 
     def frame(self, job_id: int):
@@ -108,6 +113,7 @@ class JobStore:
     def result(self, job_id: int, state: str, error: str):
         now = time.time()
         with self.lock, self.connect() as db:
+            self._expire(db, now)
             row = db.execute("SELECT state FROM job WHERE id=?", (job_id,)).fetchone()
             if not row:
                 raise LookupError("任务不存在。")
