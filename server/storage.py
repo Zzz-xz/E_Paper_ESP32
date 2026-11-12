@@ -9,6 +9,7 @@ from .models import COOLDOWN_SECONDS, DISPLAY_READ_COOLDOWN_SECONDS
 
 ACTIVE = {"queued", "downloading", "refreshing"}
 JOB_TIMEOUTS = {"queued": 15, "downloading": 45, "refreshing": 120}
+IDLE_HEARTBEAT_SECONDS = 10
 
 
 class DisplayReadCooling(Exception):
@@ -56,7 +57,8 @@ class JobStore:
         with self.lock, self.connect() as db:
             self._expire(db, now)
             row = db.execute("SELECT id,state,created,updated,error FROM job").fetchone()
-            return {"online": now - self.last_seen < 90,
+            heartbeat_seconds = 90 if row and row[1] in {"downloading", "refreshing"} else IDLE_HEARTBEAT_SECONDS
+            return {"online": now - self.last_seen < heartbeat_seconds,
                     "last_seen": self.last_seen or None,
                     "cooldown_seconds": self._cooldown(db, now),
                     "job": dict(zip(("id", "status", "created", "updated", "error"), row)) if row else None}
@@ -68,8 +70,8 @@ class JobStore:
             row = db.execute("SELECT state FROM job").fetchone()
             if row and row[0] in ACTIVE:
                 raise ValueError("屏幕正在处理另一张图片，请等待完成。")
-            if now - self.last_seen >= 90:
-                raise ValueError("设备尚未连接，请先完成配网。")
+            if now - self.last_seen >= IDLE_HEARTBEAT_SECONDS:
+                raise ValueError("设备心跳已中断，请等待重新连接后发送。")
             if self._cooldown(db, now):
                 raise ValueError("屏幕正在冷却，请倒计时结束后发送。")
             # 使用毫秒时间作为持久任务编号，固件以 64 位整数处理。

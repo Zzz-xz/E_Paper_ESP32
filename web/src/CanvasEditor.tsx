@@ -10,7 +10,7 @@ import { useImagePan } from "./useImagePan";
 type Point = { x: number; y: number };
 type Props = {
   document: DisplayDocument;
-  asset: ImageAsset | null;
+  assets: Record<string, ImageAsset>;
   preview: Preview | null;
   renderedDocument: DisplayDocument | null;
   selected: string | null;
@@ -21,7 +21,7 @@ type Props = {
   pickerConfirm: (point: Point, cursor: Point) => void;
   pickerLeave: () => void;
   pickerExit: () => void;
-  changeImage: (update: (layer: ImageLayer) => ImageLayer) => void;
+  changeImage: (update: (layer: ImageLayer) => ImageLayer, id: string) => void;
   interact: (active: boolean) => void;
   changeText: (id: string, text: string) => void;
   changeTextSize: (id: string, delta: number) => void;
@@ -37,8 +37,8 @@ export function ScreenFrame({ children }: { children: ReactNode }) {
 export function CanvasEditor(props: Props) {
   const canvas = useRef<SVGSVGElement>(null);
   const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
-  const [loadedImage, setLoadedImage] = useState("");
-  const [failedImage, setFailedImage] = useState("");
+  const [loadedImages, setLoadedImages] = useState<Record<string, string>>({});
+  const [failedImages, setFailedImages] = useState<Record<string, string>>({});
   const drag = useRef<{
     id: string;
     start: Point;
@@ -47,30 +47,39 @@ export function CanvasEditor(props: Props) {
     pan: boolean;
   } | null>(null);
   const { document, preview, selected, picking } = props;
-  const shownImage = props.renderedDocument?.image;
-  const pan = useImagePan(props.changeImage, props.interact, shownImage ?? null);
-  const liveImage = pan.view && document.image?.image_id === pan.view.layer.image_id &&
+  const imageIds = document.images.map((image) => image.id).join(",");
+  useEffect(() => {
+    const retained = new Set(document.images.map((image) => image.id));
+    setLoadedImages((value) => Object.fromEntries(Object.entries(value).filter(([id]) => retained.has(id))));
+    setFailedImages((value) => Object.fromEntries(Object.entries(value).filter(([id]) => retained.has(id))));
+  }, [imageIds]);
+  const selectedImage = document.images.find((image) => image.id === selected);
+  const pan = useImagePan(props.changeImage, props.interact, props.renderedDocument?.images ?? []);
+  const shownImage = props.renderedDocument?.images.find((image) => image.id === pan.view?.layer.id);
+  const currentPanImage = document.images.find((image) => image.id === pan.view?.layer.id);
+  const liveImage = pan.view && currentPanImage?.image_id === pan.view.layer.image_id &&
     (pan.view.active || shownImage?.offset_x !== pan.view.layer.offset_x || shownImage?.offset_y !== pan.view.layer.offset_y)
     ? pan.view.layer : null;
   const edited = document.texts.find((text) => text.id === editing?.id);
-  const imageTile = document.image?.image_id === props.renderedDocument?.image?.image_id
-    ? preview?.editor_layers.find((layer) => layer.id === "image")?.png : undefined;
-  const decoding = !!imageTile && imageTile !== loadedImage && imageTile !== failedImage;
+  const decoding = document.images.some((image) => {
+    const png = preview?.editor_layers.find((layer) => layer.id === image.id)?.png;
+    return !!png && png !== loadedImages[image.id] && png !== failedImages[image.id];
+  });
   useEffect(() => {
     const element = canvas.current!;
     const wheel = (event: WheelEvent) => {
-      if (selected !== "image" || !document.image || picking || editing || !(event.target as Element).closest('[data-layer="image"]')) return;
+      if (!selectedImage || picking || editing || (event.target as Element).closest("[data-layer]")?.getAttribute("data-layer") !== selectedImage.id) return;
       event.preventDefault();
       const bounds = element.getBoundingClientRect();
       const anchor = { x: (event.clientX - bounds.left) * 400 / bounds.width, y: (event.clientY - bounds.top) * 300 / bounds.height };
       const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? bounds.height : 1);
-      props.changeImage((layer) => zoomImage(layer, layer.zoom * Math.exp(-Math.max(-200, Math.min(200, delta)) * 0.002), anchor));
+      props.changeImage((layer) => zoomImage(layer, layer.zoom * Math.exp(-Math.max(-200, Math.min(200, delta)) * 0.002), anchor), selectedImage.id);
     };
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
-  }, [selected, document.image, picking, editing, props.changeImage]);
+  }, [selectedImage, picking, editing, props.changeImage]);
   const layers = [
-    ...(document.image ? [{ id: "image", box: document.image.box }] : []),
+    ...document.images.map((image) => ({ id: image.id, box: image.box })),
     ...document.texts.map((text) => ({ id: text.id, box: text.box })),
   ];
 
@@ -98,6 +107,7 @@ export function CanvasEditor(props: Props) {
     props.select(id);
     if (!id) return;
     const layer = layers.find((item) => item.id === id)!;
+    const image = document.images.find((item) => item.id === id);
     const start = point(event);
     const resize = target?.dataset.resize === "true";
     const border = Math.min(start.x - layer.box.x, layer.box.x + layer.box.width - start.x,
@@ -107,9 +117,9 @@ export function CanvasEditor(props: Props) {
       start,
       box: layer.box,
       resize,
-      pan: id === "image" && document.image!.zoom > 1 && !resize && !border && !event.shiftKey,
+      pan: !!image && image.zoom > 1 && !resize && !border && !event.shiftKey,
     };
-    if (drag.current.pan) pan.begin(document.image!);
+    if (drag.current.pan) pan.begin(image!);
     event.currentTarget.focus();
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -219,10 +229,9 @@ export function CanvasEditor(props: Props) {
       >
         <rect width="400" height="300" fill={inks[document.background]} />
         {layers.map((layer) => {
-          const available =
-            layer.id !== "image" ||
-            document.image?.image_id ===
-              props.renderedDocument?.image?.image_id;
+          const image = document.images.find((item) => item.id === layer.id);
+          const asset = image ? props.assets[image.image_id] : undefined;
+          const available = !image || image.image_id === props.renderedDocument?.images.find((item) => item.id === layer.id)?.image_id;
           const tile = available
             ? preview?.editor_layers.find((item) => item.id === layer.id)
             : undefined;
@@ -231,14 +240,13 @@ export function CanvasEditor(props: Props) {
               {tile ? (
                 <image
                   href={tile.png}
-                  onLoad={() => { if (layer.id === "image") setLoadedImage(tile.png); }}
-                  onError={() => { if (layer.id === "image") { setFailedImage(tile.png); props.loadError("图片图层加载失败，请重试预览。"); } }}
+                  onLoad={() => { if (image) setLoadedImages((value) => ({ ...value, [image.id]: tile.png })); }}
+                  onError={() => { if (image) { setFailedImages((value) => ({ ...value, [image.id]: tile.png })); props.loadError("图片图层加载失败，请重试预览。"); } }}
                   {...layer.box}
                   preserveAspectRatio="none"
                   style={{
                     imageRendering:
-                      layer.id === "image" &&
-                      document.image?.options.resample === "smooth"
+                      image?.options.resample === "smooth"
                         ? "auto"
                         : "pixelated",
                   }}
@@ -247,54 +255,30 @@ export function CanvasEditor(props: Props) {
                 <>
                   <rect {...layer.box} fill="#f5f6f8" />
                   <text x={layer.box.x + 4} y={layer.box.y + 20} fontSize="14">
-                    {layer.id === "image" ? "图片处理中…" : "文字处理中…"}
+                    {image ? "图片处理中…" : "文字处理中…"}
                   </text>
                 </>
               )}
-              {layer.id === "image" && props.asset && document.image &&
-                <ImageViewport asset={props.asset} layer={liveImage ?? document.image} background={document.background}
-                  active={!!liveImage} error={props.loadError} />}
+              {image && asset && (selected === image.id || liveImage?.id === image.id) &&
+                <ImageViewport asset={asset} layer={liveImage?.id === image.id ? liveImage : image} background={document.background}
+                  active={liveImage?.id === image.id} error={props.loadError} />}
               <rect
                 {...layer.box}
                 fill="transparent"
                 data-layer={layer.id}
                 className="layer-hitbox"
               />
+              {!picking && layer.id === selected && <>
+                <rect {...layer.box} fill="none" className="layer-selection" vectorEffect="non-scaling-stroke" pointerEvents="none" />
+                <rect x={layer.box.x + layer.box.width - 8} y={layer.box.y + layer.box.height - 8} width="8" height="8"
+                  className="layer-selection-handle" pointerEvents="none" />
+                <rect data-layer={layer.id} data-resize="true"
+                  x={layer.box.x + Math.max(0, layer.box.width - 32)} y={layer.box.y + Math.max(0, layer.box.height - 32)}
+                  width={Math.min(32, layer.box.width)} height={Math.min(32, layer.box.height)} fill="transparent" className="resize-handle" />
+              </>}
             </g>
           );
         })}
-        {!picking &&
-          layers
-            .filter((layer) => layer.id === selected)
-            .map((layer) => (
-              <g key={layer.id}>
-                <rect
-                  {...layer.box}
-                  fill="none"
-                  className="layer-selection"
-                  vectorEffect="non-scaling-stroke"
-                  pointerEvents="none"
-                />
-                <rect
-                  x={layer.box.x + layer.box.width - 8}
-                  y={layer.box.y + layer.box.height - 8}
-                  width="8"
-                  height="8"
-                  className="layer-selection-handle"
-                  pointerEvents="none"
-                />
-                <rect
-                  data-layer={layer.id}
-                  data-resize="true"
-                  x={layer.box.x + Math.max(0, layer.box.width - 32)}
-                  y={layer.box.y + Math.max(0, layer.box.height - 32)}
-                  width={Math.min(32, layer.box.width)}
-                  height={Math.min(32, layer.box.height)}
-                  fill="transparent"
-                  className="resize-handle"
-                />
-              </g>
-            ))}
       </svg>
       {layers.length === 0 && <div className="canvas-empty"><Icon name="image" /><strong>添加图片或文字</strong><span>开始自由排版</span></div>}
       {pan.view?.active && <span className="pan-feedback">本地取景 · 三色预览同步更新</span>}

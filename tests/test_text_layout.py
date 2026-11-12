@@ -86,17 +86,18 @@ def test_impossible_text_rejects_preview_instead_of_clipping(tmp_path):
     with TestClient(create_app(tmp_path)) as client:
         response = client.post("/api/documents/render", json=original.model_dump())
         assert response.status_code == 422
-        assert "无法完整放入空白区域" in response.json()["detail"]
+        assert "无法完整放入屏幕区域" in response.json()["detail"]
         assert not client.app.state.previews._previews
 
 
-def test_no_blank_area_never_shrinks_image():
+def test_text_can_overlay_full_screen_image_without_shrinking_it():
     original = document(image=True)
     original = original.model_copy(update={"image": original.image.model_copy(update={
         "box": original.image.box.model_copy(update={"height": 300})})})
     before = original.model_dump()
-    with pytest.raises(ValueError, match="无法完整放入空白区域"):
-        fit_text_boxes(original)
+    fitted = fit_text_boxes(original)
+    assert overlaps(fitted.texts[0].box, fitted.image.box)
+    assert fitted.image == original.image
     assert original.model_dump() == before
 
 

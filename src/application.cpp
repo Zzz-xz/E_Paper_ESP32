@@ -11,6 +11,7 @@ uint64_t setup_id = 0;
 uint32_t last_poll = 0;
 uint32_t last_refresh = 0;
 bool has_refreshed = false;
+uint8_t failed_polls = 0;
 void execute_job(uint32_t now);
 void fail_job(const char* message);
 void configure_network();
@@ -29,6 +30,12 @@ void application::tick(uint32_t now)
     if (!network_config::connected() || now - last_poll < 2000) return;
     last_poll = now;
     const device_client::Poll result = device_client::poll(job, setup_id);
+    if (result == device_client::Poll::Error) {
+        if (failed_polls < 3) ++failed_polls;
+        if (failed_polls == 3 && network_config::recover_connection()) failed_polls = 0;
+        return;
+    }
+    failed_polls = 0;
     if (result == device_client::Poll::Available) execute_job(now);
     else if (result == device_client::Poll::Setup) configure_network();
 }

@@ -25,11 +25,12 @@ export type Preview = {
   warnings: string[];
   applied_options: Options | null;
   text_boxes?: Record<string, Box>;
+  applied_images: Record<string, Options>;
 };
 export type Box = { x: number; y: number; width: number; height: number };
 export type Ink = "black" | "white" | "red";
 export const inks: Record<Ink, string> = { black: "#000000", white: "#ffffff", red: "#dc0000" };
-export type ImageLayer = { image_id: string; box: Box; options: Options; zoom: number; offset_x: number; offset_y: number; recommendation: "auto" | "manual" };
+export type ImageLayer = { id: string; image_id: string; box: Box; options: Options; zoom: number; offset_x: number; offset_y: number; recommendation: "auto" | "manual" };
 export type TextLayer = {
   id: string;
   text: string;
@@ -42,7 +43,7 @@ export type TextLayer = {
 };
 export type DisplayDocument = {
   session_id: string;
-  image: ImageLayer | null;
+  images: ImageLayer[];
   texts: TextLayer[];
   foreground: Ink;
   background: Ink;

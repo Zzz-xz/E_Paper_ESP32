@@ -4,9 +4,9 @@ import { request, type Box, type Status, type ImageLayer, type Ink } from "./api
 import { CanvasEditor, ScreenFrame } from "./CanvasEditor";
 import { useColorPicker } from "./ColorPicker";
 import { ConnectionGuide, Dialog } from "./dialogs";
-import { addText, boxesOverlap, fitBox, resizeBox } from "./geometry";
+import { addText, fitBox, resizeBox } from "./geometry";
 import { Inspector } from "./Inspector";
-import { useComposer } from "./useComposer";
+import { useComposer } from "./useDocumentComposer";
 import { useDeviceStatus } from "./useDeviceStatus";
 import { Icon } from "./Icon";
 import { LoadingSurface } from "./LoadingSurface";
@@ -24,7 +24,7 @@ const states: Record<string, string> = {
 
 export function App() {
   const composer = useComposer();
-  const { document, preview, asset } = composer;
+  const { document, preview } = composer;
   const { status, setStatus } = useDeviceStatus();
   const [selected, setSelected] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -37,37 +37,26 @@ export function App() {
   const [zoom, setZoom] = useState<"editor" | "preview" | null>(null);
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState("");
-  const [aspectLocked, setAspectLocked] = useState(true);
-  const lockedRatio = useRef(4 / 3);
+  const [imageLocks, setImageLocks] = useState<Record<string, number | null>>({});
   const input = useRef<HTMLInputElement>(null);
+  const uploadTarget = useRef<string | undefined>(undefined);
+  const selectedImage = document.images.find((image) => image.id === selected);
+  const asset = selectedImage ? composer.assets[selectedImage.image_id] ?? null : null;
+  const aspectLocked = !selectedImage || imageLocks[selectedImage.id] !== null;
   const picker = useColorPicker(
-    document.image,
+    selectedImage ?? null,
     asset,
     (hue) => {
-      composer.change((value) => ({
-        ...value,
-        image: value.image && {
-          ...value.image,
-          recommendation: "manual",
-          options: {
-            ...value.image.options,
-            accent_mode: "manual",
-            accent_hue: hue,
-          },
-        },
-      }));
+      changeImage((image) => ({ ...image, options: { ...image.options, accent_mode: "manual", accent_hue: hue } }));
       setPicking(false);
     },
     composer.setError,
   );
 
   useEffect(() => {
-    if (document.image) {
-      setSelected("image");
-      lockedRatio.current = document.image.box.width / document.image.box.height;
-    }
+    if (composer.lastAdded) setSelected(composer.lastAdded);
     setPicking(false);
-  }, [document.image?.image_id]);
+  }, [composer.lastAdded]);
   useEffect(() => {
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -80,13 +69,12 @@ export function App() {
   });
 
   function changeBox(id: string, box: Box) {
-    if (id !== "image" && document.image && boxesOverlap(fitBox(box), document.image.box)) {
-      composer.setError("文字不能占用图片显示区域，请放置在空白处。");
-      return;
-    }
+    const image = document.images.find((item) => item.id === id);
+    const ratio = imageLocks[id] === undefined && image ? image.box.width / image.box.height : imageLocks[id];
+    if (image && imageLocks[id] === undefined) setImageLocks((value) => ({ ...value, [id]: ratio! }));
     composer.change((value) =>
-      id === "image"
-        ? { ...value, image: value.image && { ...value.image, box: resizeBox(value.image.box, box, aspectLocked ? lockedRatio.current : null) } }
+      image
+        ? { ...value, images: value.images.map((item) => item.id === id ? { ...item, box: resizeBox(item.box, box, ratio ?? null) } : item) }
         : {
             ...value,
             texts: value.texts.map((text) =>
@@ -95,8 +83,8 @@ export function App() {
           },
     );
   }
-  function changeImage(update: (layer: ImageLayer) => ImageLayer) {
-    composer.change((value) => ({ ...value, image: value.image && update(value.image) }));
+  function changeImage(update: (layer: ImageLayer) => ImageLayer, id = selected) {
+    composer.change((value) => ({ ...value, images: value.images.map((image) => image.id === id ? update(image) : image) }));
   }
   function changeText(id: string, text: string) {
     composer.change((value) => ({ ...value, texts: value.texts.map((item) => item.id === id ? { ...item, text, auto_size: true } : item) }));
@@ -109,7 +97,7 @@ export function App() {
     const result = addText(document);
     if (!result) {
       composer.setError(
-        "空白区域不足或文字已达 12 段。请手动调整图片框留出位置；添加文字不会改变已有图片。",
+        "文字已达 12 段或文字区域不足，请调整已有文字。图片不会被自动改变。",
       );
       return;
     }
@@ -119,9 +107,12 @@ export function App() {
     picker.clear();
   }
   function remove() {
+    if (selectedImage) setImageLocks((value) => {
+      const next = { ...value }; delete next[selectedImage.id]; return next;
+    });
     composer.change((value) =>
-      selected === "image"
-        ? { ...value, image: null }
+      selectedImage
+        ? { ...value, images: value.images.filter((image) => image.id !== selected) }
         : {
             ...value,
             texts: value.texts.filter((text) => text.id !== selected),
@@ -135,6 +126,20 @@ export function App() {
     setSelected(id);
     setPicking(false);
     picker.clear();
+  }
+  function chooseImages(replaceId?: string) {
+    uploadTarget.current = replaceId;
+    input.current!.multiple = !replaceId;
+    input.current!.click();
+  }
+  function clearImages() {
+    composer.clearImages();
+    if (selectedImage) setSelected(null);
+    setImageLocks({}); setPicking(false); picker.clear();
+  }
+  function clearTexts() {
+    composer.change((value) => ({ ...value, texts: [] }));
+    if (!selectedImage) setSelected(null);
   }
   async function send() {
     if (!preview) return;
@@ -164,7 +169,7 @@ export function App() {
     status?.network_setup?.state ?? "idle",
   );
   const hasContent =
-    !!document.image || document.texts.some((text) => text.text.trim());
+    document.images.length > 0 || document.texts.some((text) => text.text.trim());
   const previewLoading = composer.updating || (!!preview && preview.png !== decodedPreview && preview.png !== failedPreview);
   const canSend =
     !!preview &&
@@ -180,7 +185,7 @@ export function App() {
     hasContent;
   const editorProps = {
     document,
-    asset,
+    assets: composer.assets,
     preview,
     renderedDocument: composer.renderedDocument,
     selected,
@@ -232,9 +237,8 @@ export function App() {
       <main>
         <div className="intro">
           <div>
-            <span className="workspace-eyebrow">E-PAPER STUDIO</span>
-            <h1>把喜欢的图文，留在屏幕上。</h1>
-            <p>添加内容、自由排版，实时预览黑白红效果。</p>
+            <h1>图文排版</h1>
+            <p>自由排版，预览每一笔黑、白与红</p>
           </div>
           <div className="screen-spec">
             <span>4.2 寸</span>
@@ -245,11 +249,17 @@ export function App() {
         <div className="workspace composer-workspace">
           <div className="images-column">
             <div className="editor-toolbar">
-              <Button onClick={() => input.current?.click()}>
-                <Icon name="image" />
-                {document.image ? "更换图片" : "添加图片"}
-              </Button>
-              <Button onClick={insertText}><Icon name="text" />＋ 添加文字</Button>
+              <div className="toolbar-group" role="group" aria-label="添加内容">
+                <Button disabled={document.images.length >= 8 || composer.uploading} onClick={() => chooseImages()}>
+                  <Icon name="image" />
+                  添加图片 <span className="image-count">{document.images.length}/8</span>
+                </Button>
+                <Button onClick={insertText}><Icon name="text" />添加文字</Button>
+              </div>
+              <div className="toolbar-group toolbar-clear" role="group" aria-label="清空内容">
+                <Button className="clear-content-button" disabled={!document.images.length && !composer.uploading} onClick={clearImages}>清空图片</Button>
+                <Button className="clear-content-button" disabled={!document.texts.length} onClick={clearTexts}>清空文字</Button>
+              </div>
               <div className="canvas-palette" role="group" aria-label="画布配色">
                 {(["foreground", "background"] as const).map((role) => <label key={role}>
                   {role === "foreground" ? "前景" : "背景"}
@@ -265,7 +275,7 @@ export function App() {
             <div className="image-pair">
               <section className="image-panel" aria-busy={composer.updating}>
                 <div className="panel-heading">
-                  <h2><span className="panel-number">01</span>编辑排版</h2>
+                  <h2>编辑排版</h2>
                   <Button
                     className="text-button"
                     onClick={() => setZoom("editor")}
@@ -280,7 +290,7 @@ export function App() {
                   <span>
                     {picking
                       ? "点击取色 · 右键退出"
-                      : selected === "image" && (document.image?.zoom ?? 1) > 1
+                      : selectedImage && selectedImage.zoom > 1
                         ? "拖动图片取景 · 拖边框移动"
                         : "拖动排版 · 双击文字"}
                   </span>
@@ -289,7 +299,7 @@ export function App() {
               </section>
               <section className="image-panel preview-panel" aria-busy={previewLoading}>
                 <div className="panel-heading">
-                  <h2><span className="panel-number">02</span>实屏预览</h2>
+                  <h2>实屏预览</h2>
                   <Button
                     className="text-button"
                     disabled={!preview}
@@ -320,11 +330,6 @@ export function App() {
                     )}
                     {previewLoading && <LoadingSurface compact={!!preview} label={composer.uploading ? "正在读取原图" : "正在生成三色预览"} />}
                   </ScreenFrame>
-                  {composer.updating && (
-                    <span className="updating-badge" role="status">
-                      正在更新…
-                    </span>
-                  )}
                 </div>
                 <div className="image-caption">
                   <span>边框内即实际显示区域</span>
@@ -332,6 +337,7 @@ export function App() {
                 </div>
               </section>
             </div>
+            <div className="workbench-meta">
             <div className="palette-summary">
               <div className="palette-title">三色占比</div>
               {(["black", "white", "red"] as const).map((color, index) => (
@@ -372,21 +378,23 @@ export function App() {
                 </span>
               </div>
             )}
+            </div>
           </div>
           <Inspector
-            recommend={composer.recommend}
+            recommend={() => { if (selectedImage) composer.recommend(selectedImage.id); }}
             document={document}
             asset={asset}
+            uploading={composer.uploading}
             selected={selected}
             picking={picking}
             select={select}
             change={composer.change}
             changeBox={changeBox}
             changeImage={changeImage}
+            replaceImage={() => { if (selectedImage) chooseImages(selectedImage.id); }}
             aspectLocked={aspectLocked}
             toggleAspect={() => {
-              if (document.image) lockedRatio.current = document.image.box.width / document.image.box.height;
-              setAspectLocked(!aspectLocked);
+              if (selectedImage) setImageLocks((value) => ({ ...value, [selectedImage.id]: aspectLocked ? null : selectedImage.box.width / selectedImage.box.height }));
             }}
             remove={remove}
             togglePicker={() => {
@@ -442,14 +450,15 @@ export function App() {
         hidden
         ref={input}
         type="file"
+        multiple
         accept="image/jpeg,image/png,image/webp"
         aria-label="上传图片"
         onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) {
+          const files = Array.from(event.target.files ?? []);
+          if (files.length) {
             setNotice("");
             setPicking(false);
-            composer.upload(file);
+            composer.upload(files, uploadTarget.current);
           }
           event.target.value = "";
         }}

@@ -1,4 +1,4 @@
-"""统一文字测量、空白区扩展与栅格化，图片框不参与自动调整。"""
+"""统一文字测量与栅格化；文字可叠在图片上，图片框不参与自动调整。"""
 import math
 from functools import lru_cache
 from pathlib import Path
@@ -22,8 +22,6 @@ def fit_text_boxes(document):
     for index, text in enumerate(texts):
         if text.auto_size:
             occupied = [item.box for other, item in enumerate(texts) if other != index]
-            if document.image:
-                occupied.append(document.image.box)
             texts[index] = _fit_text(text, _free_regions(occupied))
     return document.model_copy(update={"texts": texts})
 
@@ -80,7 +78,7 @@ def _fit_text(layer, regions):
         cost = ((x - layer.box.x) ** 2 + (y - layer.box.y) ** 2, width * height)
         candidates.append((cost, box))
     if not candidates:
-        raise ValueError(f"文字「{layer.text[:12]}」无法完整放入空白区域，请缩小字号、精简文字或手动调整图片框留出位置。")
+        raise ValueError(f"文字「{layer.text[:12]}」无法完整放入屏幕区域，请缩小字号、精简文字或调整其他文字框。")
     return layer.model_copy(update={"box": min(candidates, key=lambda value: value[0])[1]})
 
 

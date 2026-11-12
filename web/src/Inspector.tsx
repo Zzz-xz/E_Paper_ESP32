@@ -25,13 +25,15 @@ type Props = {
   aspectLocked: boolean;
   toggleAspect: () => void;
   recommend: () => void;
+  replaceImage: () => void;
+  uploading: boolean;
 };
 
 export function Inspector(props: Props) {
   const [tab, setTab] = useState<"layout" | "color">("layout");
   const { document, selected } = props;
   const text = document.texts.find((item) => item.id === selected);
-  const image = selected === "image" ? document.image : null;
+  const image = document.images.find((item) => item.id === selected);
   const box = image?.box ?? text?.box;
   function changeText(update: Partial<TextLayer>) {
     props.change((value) => ({
@@ -42,14 +44,7 @@ export function Inspector(props: Props) {
     }));
   }
   function changeOption<K extends keyof Options>(key: K, value: Options[K]) {
-    props.change((document) => ({
-      ...document,
-      image: document.image && {
-        ...document.image,
-        recommendation: ["fit", "rotation", "resample"].includes(key) ? document.image.recommendation : "manual",
-        options: { ...document.image.options, [key]: value },
-      },
-    }));
+    props.changeImage((image) => ({ ...image, recommendation: "manual", options: { ...image.options, [key]: value } }));
   }
   const options = image?.options;
   function rotate(degrees: number) {
@@ -60,34 +55,41 @@ export function Inspector(props: Props) {
     <aside className="controls editor-inspector">
       <div className="inspector-heading">
         <h2>元素属性</h2>
-        <span>点击画布选择</span>
+        <span>属性区可滚动</span>
       </div>
       <label className="field-label" htmlFor="selected-layer">
         当前元素
       </label>
+      <div className="layer-selector">
       <select
         id="selected-layer"
         value={selected ?? ""}
         onChange={(event) => props.select(event.target.value || null)}
       >
         <option value="">选择图片或文字</option>
-        {document.image && <option value="image">图片</option>}
+        {document.images.map((image, index) => <option key={image.id} value={image.id}>图片 {index + 1}</option>)}
         {document.texts.map((item, index) => (
           <option key={item.id} value={item.id}>
             文字 {index + 1} · {item.text.slice(0, 10) || "空文字"}
           </option>
         ))}
       </select>
+      {image && <Button className="replace-image-button" aria-label="更换这张图片" title="更换这张图片，保留当前图层设置" disabled={props.uploading} onClick={props.replaceImage}><Icon name="image" />替换</Button>}
+      </div>
       {!box && (
         <p className="inspector-empty">
-          上传一张图片，或点击“添加文字”。选中元素后可拖动、缩放和编辑。
+          最多添加 8 张图片和 12 段文字。文字在图片上方，可自由叠放；选中元素后拖动、缩放或编辑。
         </p>
       )}
       {box && (
         <>
           {image && (
             <>
-            <div className="image-orientation">
+            <div className="property-tabs segmented">
+              <Button aria-pressed={tab === "layout"} className={tab === "layout" ? "selected" : ""} onClick={() => setTab("layout")}>位置与尺寸</Button>
+              <Button aria-pressed={tab === "color"} className={tab === "color" ? "selected" : ""} onClick={() => setTab("color")}>图片调色</Button>
+            </div>
+            {tab === "layout" && <div className="image-orientation">
               <label className="field-label" htmlFor="rotation">图片方向</label>
               <div className="orientation-controls" role="group" aria-label="图片旋转">
                 <Button title="逆时针旋转 90°，实时更新预览" onClick={() => rotate(-90)}><Icon name="rotate-left" />左转 90°</Button>
@@ -96,23 +98,7 @@ export function Inspector(props: Props) {
                 </select>
                 <Button title="顺时针旋转 90°，实时更新预览" onClick={() => rotate(90)}><Icon name="rotate-right" />右转 90°</Button>
               </div>
-            </div>
-            <div className="property-tabs segmented">
-              <Button
-                aria-pressed={tab === "layout"}
-                className={tab === "layout" ? "selected" : ""}
-                onClick={() => setTab("layout")}
-              >
-                位置与尺寸
-              </Button>
-              <Button
-                aria-pressed={tab === "color"}
-                className={tab === "color" ? "selected" : ""}
-                onClick={() => setTab("color")}
-              >
-                图片调色
-              </Button>
-            </div>
+            </div>}
             </>
           )}
           {text && (
@@ -150,7 +136,7 @@ export function Inspector(props: Props) {
                   </select>
                 </label>
               </div>
-              <p className="control-help keyboard-help">选中文字后按 + / − 调整字号，Ctrl+↑ / ↓ 在原位编辑时也可使用。文字框在空白区自动扩展。</p>
+              <p className="control-help keyboard-help">选中文字后按 + / − 调整字号，Ctrl+↑ / ↓ 在原位编辑时也可使用。文字框随内容自动扩展，可叠在图片上方。</p>
               <div className="alignment-controls">
                 <div className="alignment-row">
                   <span>水平</span>
@@ -242,7 +228,8 @@ export function Inspector(props: Props) {
                   onChange={(event) => props.changeImage((layer) => zoomImage(layer, Number(event.target.value) / 100))} />
                 <Button onClick={() => props.changeImage((layer) => ({ ...layer, zoom: 1, offset_x: 0, offset_y: 0 }))}>恢复 100%</Button>
               </div>
-              <p className="control-help">放大后按住左键拖动图片取景；拖边框或按住 Shift 拖动可移动图片框。</p>
+              <p className="control-help" title="放大后按住左键拖动图片取景；拖边框或按住 Shift 拖动可移动图片框。">滚轮缩放 · 左键取景 · Shift 拖框</p>
+              <div className="image-fit-controls">
               <label className="field-label">图片填充</label>
               <div className="segmented">
                 <Button
@@ -260,9 +247,9 @@ export function Inspector(props: Props) {
                   铺满裁剪
                 </Button>
               </div>
-              <div className="field-grid">
-                <label>
-                  缩放
+              </div>
+              <div className="image-resample-controls">
+                <label htmlFor="resample">缩放方式</label>
                   <select
                     id="resample"
                     value={options.resample}
@@ -276,7 +263,6 @@ export function Inspector(props: Props) {
                     <option value="smooth">平滑</option>
                     <option value="pixel">像素画</option>
                   </select>
-                </label>
               </div>
             </>
           )}
@@ -364,7 +350,7 @@ export function Inspector(props: Props) {
               </Button>
             </div>
           )}
-          <Button className="delete-button" onClick={props.remove}>
+          <Button className="delete-button" disabled={!!image && props.uploading} title={image && props.uploading ? "上传完成后可删除单张图片，也可随时清空所有图片" : undefined} onClick={props.remove}>
             删除{image ? "图片" : "这段文字"}
           </Button>
         </>

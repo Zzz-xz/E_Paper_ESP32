@@ -8,7 +8,7 @@
 
 namespace {
 struct Settings { String ssid; String password; String server; };
-enum class Phase { Portal, Connecting, Ready };
+enum class Phase { Portal, Connecting, RetryWait, Ready };
 Settings saved, candidate;
 WebServer portal(80);
 Phase phase = Phase::Portal;
@@ -25,6 +25,7 @@ bool scan_active = false;
 uint32_t scan_started = 0;
 uint32_t connect_started = 0;
 uint32_t portal_close_at = 0;
+uint32_t reconnect_due = 0;
 uint8_t attempts = 0;
 
 bool read_settings();
@@ -92,6 +93,9 @@ void network_config::tick()
     } else if (phase == Phase::Ready && WiFi.status() != WL_CONNECTED) {
         attempts = 0;
         start_connection(now);
+    } else if (phase == Phase::RetryWait && static_cast<int32_t>(now - reconnect_due) >= 0) {
+        attempts = 0;
+        start_connection(now);
     }
     if (phase == Phase::Ready && portal_active && static_cast<int32_t>(now - portal_close_at) >= 0) {
         portal.stop();
@@ -104,6 +108,17 @@ void network_config::tick()
 }
 
 bool network_config::connected() { return phase == Phase::Ready && WiFi.status() == WL_CONNECTED; }
+
+/** @brief 接入点仍显示已连接但网站持续不可达时，重建 STA 连接；不清除已保存的设置。 */
+bool network_config::recover_connection()
+{
+    if (phase != Phase::Ready || scan_active || saved.ssid.isEmpty()) return false;
+    Serial.println("[network] Reconnecting after repeated workbench communication failures.");
+    attempts = 0;
+    start_connection(millis());
+    return true;
+}
+
 const String& network_config::server_url() { return saved.server; }
 
 /** @brief 网页请求保留现有 STA 连接，保护热点同时提供切换网络失败后的恢复入口。 */
@@ -315,7 +330,8 @@ void connection_succeeded(uint32_t now)
     error_message = "";
     phase = Phase::Ready;
     /** 联网工作台由 USB 供电，关闭调制解调器省电，避免收图等待唤醒。 */
-    if (!WiFi.setSleep(false)) Serial.println("[network] Cannot disable Wi-Fi sleep.");
+    if (WiFi.getSleep() != WIFI_PS_NONE && !WiFi.setSleep(false))
+        Serial.println("[network] Cannot disable Wi-Fi sleep.");
     portal_close_at = now + 5000;
     Serial.println("[network] Wi-Fi connected; display service ready.");
 }
@@ -323,12 +339,15 @@ void connection_succeeded(uint32_t now)
 void connection_failed(uint32_t now)
 {
     if (!submission && attempts < 3) { start_connection(now); return; }
+    const bool retry_saved = !submission && !saved.ssid.isEmpty();
     error_message = "连接超时，请确认 2.4 GHz Wi-Fi 名称和密码。";
     if (!portal_active) start_portal();
-    phase = Phase::Portal;
+    phase = retry_saved ? Phase::RetryWait : Phase::Portal;
+    reconnect_due = millis() + 30000;
     submission = false;
     candidate.password = "";
-    Serial.println("[network] Wi-Fi connection timed out; use setup portal.");
+    Serial.println(retry_saved ? "[network] Wi-Fi unavailable; retrying saved network in 30 seconds."
+                               : "[network] Wi-Fi connection timed out; use setup portal.");
 }
 
 void service_serial()

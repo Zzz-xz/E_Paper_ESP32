@@ -5,14 +5,15 @@ import { panImage } from "./geometry";
 const PREVIEW_INTERVAL_MS = 120;
 
 /** 本地取景按浏览器绘制帧更新，后端仅接收合并后的偏移；结束时提交最终位置。 */
-export function useImagePan(change: (update: (layer: ImageLayer) => ImageLayer) => void, interact: (active: boolean) => void, rendered: ImageLayer | null) {
+export function useImagePan(change: (update: (layer: ImageLayer) => ImageLayer, id: string) => void, interact: (active: boolean) => void, rendered: ImageLayer[]) {
   const [view, setView] = useState<{ layer: ImageLayer; active: boolean } | null>(null);
   const gesture = useRef<{ origin: ImageLayer; latest: ImageLayer; published: number } | null>(null);
   const animation = useRef(0);
 
   useEffect(() => {
-    if (view && !view.active && rendered?.image_id === view.layer.image_id &&
-        rendered.offset_x === view.layer.offset_x && rendered.offset_y === view.layer.offset_y) setView(null);
+    const image = rendered.find((item) => item.id === view?.layer.id);
+    if (view && !view.active && image?.image_id === view.layer.image_id &&
+        image.offset_x === view.layer.offset_x && image.offset_y === view.layer.offset_y) setView(null);
   }, [rendered, view]);
 
   useEffect(() => () => {
@@ -21,7 +22,7 @@ export function useImagePan(change: (update: (layer: ImageLayer) => ImageLayer) 
   }, []);
 
   function publish(layer: ImageLayer) {
-    change((current) => ({ ...current, offset_x: layer.offset_x, offset_y: layer.offset_y }));
+    change((current) => ({ ...current, offset_x: layer.offset_x, offset_y: layer.offset_y }), layer.id);
   }
 
   function begin(layer: ImageLayer) {

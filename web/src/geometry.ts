@@ -41,14 +41,14 @@ function blankBox(occupied: Box[], sizes: [number, number][]): Box | null {
   return null;
 }
 
-/** 新文字只占用空白区，已有图片的尺寸、位置和调色参数保持用户设置。 */
+/** 优先放在留白区，空间不足时置于图片上方，已有图片保持用户设置。 */
 export function addText(
   document: DisplayDocument,
 ): { document: DisplayDocument; id: string } | null {
   if (document.texts.length === 12) return null;
-  const image = document.image;
   const occupied = document.texts.map((text) => text.box);
-  const box = blankBox(image ? [...occupied, image.box] : occupied, [
+  const sizes: [number, number][] = [[184, 40], [120, 32]];
+  const box = blankBox([...occupied, ...document.images.map((image) => image.box)], sizes) ?? blankBox(occupied, [
     [184, 40],
     [120, 32],
   ]);
@@ -64,7 +64,7 @@ export function addText(
     auto_size: true,
   };
   return {
-    document: { ...document, image, texts: [...document.texts, text] },
+    document: { ...document, texts: [...document.texts, text] },
     id: text.id,
   };
 }
@@ -72,44 +72,31 @@ export function addText(
 export function placeImage(
   document: DisplayDocument,
   asset: ImageAsset,
-  preserve: boolean,
+  id: string,
 ): DisplayDocument {
-  const box =
-    document.image?.box ??
-    (document.texts.length === 0
-      ? fullScreen
-      : blankBox(
-          document.texts.map((text) => text.box),
-          [
-            [384, 180],
-            [384, 120],
-            [240, 120],
-            [160, 80],
-            [80, 60],
-          ],
-        ));
-  if (!box) throw new Error("空白区域不足，请先移动或缩小文字，再添加图片。");
-  return {
-    ...document,
-    image: {
-      zoom: preserve && document.image ? document.image.zoom : 1,
-      offset_x: preserve && document.image ? document.image.offset_x : 0,
-      offset_y: preserve && document.image ? document.image.offset_y : 0,
+  const existing = document.images.find((image) => image.id === id);
+  if (existing) return { ...document, images: document.images.map((image) => image.id === id
+    ? { ...image, image_id: asset.image_id, recommendation: "manual" } : image) };
+  const index = document.images.length;
+  const box = index === 0 && document.texts.length === 0 ? fullScreen
+    : blankBox([...document.images, ...document.texts].map((layer) => layer.box), [[160, 120], [120, 90], [80, 60]])
+      ?? { x: 16 + (index % 4) * 20, y: 16 + Math.floor(index / 4) * 20, width: 160, height: 120 };
+  return { ...document, images: [...document.images, {
+      id,
+      zoom: 1,
+      offset_x: 0,
+      offset_y: 0,
       recommendation: "manual",
       image_id: asset.image_id,
       box,
-      options:
-        preserve && document.image
-          ? document.image.options
-          : asset.recommended_options,
-    },
-  };
+      options: asset.recommended_options,
+    }] };
 }
 
 /** 将屏幕上的图片坐标逆变换到方向修正后的原图，留白区不参与取色。 */
 export function sourcePoint(
   point: { x: number; y: number },
-  layer: NonNullable<DisplayDocument["image"]>,
+  layer: ImageLayer,
   asset: ImageAsset,
 ) {
   const rotation = layer.options.rotation;

@@ -52,6 +52,7 @@ class CanvasBox(BaseModel):
 
 class ImageLayer(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    id: str = Field(default="image", min_length=1, max_length=64)
     image_id: str = Field(min_length=1, max_length=64)
     box: CanvasBox = Field(default_factory=CanvasBox)
     options: RenderOptions = Field(default_factory=RenderOptions)
@@ -77,6 +78,7 @@ class DisplayDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
     session_id: str = Field(min_length=1, max_length=64)
     image: ImageLayer | None = None
+    images: list[ImageLayer] = Field(default_factory=list, max_length=8)
     texts: list[TextLayer] = Field(default_factory=list, max_length=12)
     foreground: Literal["black", "white", "red"] = "black"
     background: Literal["black", "white", "red"] = "white"
@@ -89,10 +91,16 @@ class DisplayDocument(BaseModel):
 
     @model_validator(mode="after")
     def unique_text_ids(self):
-        ids = [item.id for item in self.texts]
-        if len(set(ids)) != len(ids) or "image" in ids:
-            raise ValueError("文字标识必须唯一，且不能使用 image。")
+        if self.image and self.images:
+            raise ValueError("image 与 images 不能同时提供。")
+        ids = [item.id for item in self.texts] + [item.id for item in self.images]
+        if len(set(ids)) != len(ids) or "image" in [item.id for item in self.texts]:
+            raise ValueError("图层标识必须唯一，文字不能使用 image。")
         return self
+
+    @property
+    def picture_layers(self):
+        return self.images or ([self.image] if self.image else [])
 
 
 def _validate_setup_url(value):

@@ -17,6 +17,7 @@ class RenderedDocument:
     warnings: list[str]
     applied_options: RenderOptions | None = None
     text_boxes: dict = field(default_factory=dict)
+    applied_images: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -34,18 +35,18 @@ def render_image_tile(image, layer, background, prepared=None):
     return RenderedTile(quantized, png_url(tile), hue)
 
 
-def render_document(document: DisplayDocument, image: Image.Image | None, image_tile: RenderedTile | None = None) -> RenderedDocument:
+def render_document(document: DisplayDocument, image: Image.Image | None, image_tile: RenderedTile | None = None,
+                    image_tiles: dict | None = None) -> RenderedDocument:
     document = fit_text_boxes(document)
     background = INKS[document.background]
     canvas = Image.new("RGB", (WIDTH, HEIGHT), background)
     layers, warnings = [], []
     hue = None
-    if document.image:
-        layer = document.image
-        tile = image_tile or render_image_tile(image, layer, background)
+    for layer in document.picture_layers:
+        tile = image_tiles[layer.id] if image_tiles is not None else image_tile or render_image_tile(image, layer, background)
         hue = tile.hue
         canvas.paste(tile.image, (layer.box.x, layer.box.y))
-        layers.append({"id": "image", "box": layer.box.model_dump(), "png": tile.editor_png})
+        layers.append({"id": layer.id, "box": layer.box.model_dump(), "png": tile.editor_png})
     for text in document.texts:
         tile, clipped = text_tile(text, document.foreground)
         canvas.paste(tile, (text.box.x, text.box.y), tile.getchannel("A"))
@@ -54,7 +55,8 @@ def render_document(document: DisplayDocument, image: Image.Image | None, image_
             warnings.append(f"文字「{text.text[:12]}」超出文本框，请增大文本框或减小字号。")
     return RenderedDocument(finish_frame(canvas, hue), layers, warnings,
                             document.image.options if document.image else None,
-                            {text.id: text.box.model_dump() for text in document.texts if text.auto_size})
+                            {text.id: text.box.model_dump() for text in document.texts if text.auto_size},
+                            {layer.id: layer.options.model_dump() for layer in document.picture_layers})
 
 
 def png_url(image: Image.Image) -> str:

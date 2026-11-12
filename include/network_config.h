@@ -5,6 +5,7 @@ namespace network_config {
 void begin();
 void tick();
 bool connected();
+bool recover_connection();
 const String& server_url();
 String open_remote_portal();
 String setup_url();

@@ -94,6 +94,7 @@ String job_path(uint64_t id)
 
 bool post_once(const String& path, const String& payload, String& response, int& status)
 {
+    const uint32_t started = millis();
     WiFiClient client;
     HTTPClient http;
     if (!http.begin(client, network_config::server_url() + path)) return false;
@@ -106,6 +107,10 @@ bool post_once(const String& path, const String& payload, String& response, int&
     const bool readable = status == 204 || (status > 0 && length >= 0 && length <= 1024);
     if (readable && status != 204) response = http.getString();
     http.end();
+    if (!readable || status >= 400)
+        Serial.printf("[http] Request failed: status %d, %lu ms, Wi-Fi %d, RSSI %d dBm, heap %u\n",
+                      status, static_cast<unsigned long>(millis() - started),
+                      static_cast<int>(WiFi.status()), WiFi.RSSI(), ESP.getFreeHeap());
     return readable;
 }
 

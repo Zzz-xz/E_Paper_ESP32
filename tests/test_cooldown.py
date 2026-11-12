@@ -18,6 +18,7 @@ def test_next_refresh_is_allowed_after_thirty_seconds(tmp_path, monkeypatch):
     store.result(job_id, "completed", "")
     assert store.status()["cooldown_seconds"] == 20
     now[0] = 1029.999
+    store.poll()
     with pytest.raises(ValueError, match="冷却"):
         store.create(bytes(FRAME_BYTES), b"preview")
     now[0] = 1030
