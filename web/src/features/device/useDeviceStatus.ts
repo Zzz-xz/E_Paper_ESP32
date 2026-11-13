@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { request, type Status } from "./api";
+import { request, type Status } from "../../lib/api";
 
 export function useDeviceStatus() {
   const [status, setStatus] = useState<Status | null>(null);

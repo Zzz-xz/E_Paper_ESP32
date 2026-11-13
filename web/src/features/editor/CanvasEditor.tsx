@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { inks, type Box, type DisplayDocument, type Preview, type ImageLayer, type ImageAsset } from "./api";
+import { ScreenFrame } from "../../components/ui/ScreenFrame";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { inks, type Box, type DisplayDocument, type Preview, type ImageLayer, type ImageAsset } from "../../lib/api";
 import { fitBox, zoomImage } from "./geometry";
 import { InlineTextEditor } from "./InlineTextEditor";
-import { LoadingSurface } from "./LoadingSurface";
-import { Icon } from "./Icon";
+import { LoadingSurface } from "../../components/ui/LoadingSurface";
+import { Icon } from "../../components/ui/Icon";
 import { ImageViewport } from "./ImageViewport";
 import { useImagePan } from "./useImagePan";
 
@@ -29,10 +30,6 @@ type Props = {
   loadingLabel: string;
   loadError: (message: string) => void;
 };
-
-export function ScreenFrame({ children }: { children: ReactNode }) {
-  return <div className="screen-frame">{children}</div>;
-}
 
 export function CanvasEditor(props: Props) {
   const canvas = useRef<SVGSVGElement>(null);

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { request } from "./api";
-import { Button } from "./Button";
-import { Dialog } from "./dialogs";
-import { Icon } from "./Icon";
+import { request } from "../../lib/api";
+import { Button } from "../../components/ui/Button";
+import { Dialog } from "../../components/ui/Dialog";
+import { Icon } from "../../components/ui/Icon";
 import { RecoveryControl } from "./RecoveryControl";
 
 type State = {

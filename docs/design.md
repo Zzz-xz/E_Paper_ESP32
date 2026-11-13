@@ -21,4 +21,10 @@
 
 ## 实现约束
 
-展示样式集中在 `web/src/style.css`。页面排布和展示组件可以调整；图片处理、文档数据、预览调度、设备权限与通信不属于视觉修改范围。
+展示样式集中在 `web/src/styles/workbench.css`。页面排布和展示组件可以调整；图片处理、文档数据、预览调度、设备权限与通信不属于视觉修改范围。
+
+## 相关文档与来源
+
+[产品约束](product.md) · [工作台适配要求](ui/workbench.md)
+
+视觉设计参考 [unslop by Damir Sokolovsky (@heydamir)](https://heydamir.design/unslop)，遵循 CC BY 4.0。

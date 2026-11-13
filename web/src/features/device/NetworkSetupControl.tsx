@@ -1,7 +1,7 @@
-import { Button } from "./Button";
+import { Button } from "../../components/ui/Button";
 import { useEffect, useState } from "react";
-import { request, type NetworkSetup, type Status } from "./api";
-import { RecoveryControl } from "./RecoveryControl";
+import { request, type NetworkSetup, type Status } from "../../lib/api";
+import { RecoveryControl } from "../security/RecoveryControl";
 
 type AdminState = { configured: boolean; authenticated: boolean };
 

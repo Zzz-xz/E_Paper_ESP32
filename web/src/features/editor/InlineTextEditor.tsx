@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { inks, type Ink, type TextLayer } from "./api";
+import { inks, type Ink, type TextLayer } from "../../lib/api";
 
 type Props = {
   layer: TextLayer;

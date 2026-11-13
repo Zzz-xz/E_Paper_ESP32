@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ImageAsset, ImageLayer } from "./api";
+import type { ImageAsset, ImageLayer } from "../../lib/api";
 import { sourcePoint } from "./geometry";
 
 type Point = { x: number; y: number };

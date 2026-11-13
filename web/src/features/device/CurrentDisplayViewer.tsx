@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { request } from "./api";
-import { Button } from "./Button";
-import { ScreenFrame } from "./CanvasEditor";
-import { Dialog } from "./dialogs";
-import { Icon } from "./Icon";
-import { LoadingSurface } from "./LoadingSurface";
+import { request } from "../../lib/api";
+import { Button } from "../../components/ui/Button";
+import { ScreenFrame } from "../../components/ui/ScreenFrame";
+import { Dialog } from "../../components/ui/Dialog";
+import { Icon } from "../../components/ui/Icon";
+import { LoadingSurface } from "../../components/ui/LoadingSurface";
 
 type Snapshot = { png: string; job_id: number; confirmed_at: number; cooldown_seconds: number };
 const READ_COOLDOWN_SECONDS = 5;

@@ -5,7 +5,7 @@ import {
   type ImageAsset,
   type TextLayer,
   type ImageLayer,
-} from "./api";
+} from "../../lib/api";
 
 export const fullScreen: Box = { x: 0, y: 0, width: 400, height: 300 };
 

@@ -1,5 +1,5 @@
-import { Button } from "./Button";
-import { Icon } from "./Icon";
+import { Button } from "../../components/ui/Button";
+import { Icon } from "../../components/ui/Icon";
 import { useEffect, useState } from "react";
 import type {
   Box,
@@ -8,7 +8,7 @@ import type {
   Options,
   TextLayer,
   ImageLayer,
-} from "./api";
+} from "../../lib/api";
 import { alignBox, zoomImage, type ObjectAlignment } from "./geometry";
 
 type Props = {

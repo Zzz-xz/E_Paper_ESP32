@@ -1,4 +1,4 @@
-import { Dialog } from "./dialogs";
+import { Dialog } from "../../components/ui/Dialog";
 
 const shortcuts = [
   ["选中元素后", "方向键", "移动元素 1 像素"],

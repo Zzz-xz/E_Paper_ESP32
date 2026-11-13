@@ -1,6 +1,6 @@
-import { Button } from "./Button";
+import { Button } from "../../components/ui/Button";
 import { useEffect, useState } from "react";
-import { ApiError, request } from "./api";
+import { ApiError, request } from "../../lib/api";
 
 type RecoveryState = { configured: boolean; authenticated: boolean };
 

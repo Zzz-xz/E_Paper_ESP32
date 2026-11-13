@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { ImageAsset, ImageLayer, Ink } from "./api";
-import { inks } from "./api";
+import type { ImageAsset, ImageLayer, Ink } from "../../lib/api";
+import { inks } from "../../lib/api";
 import { imageTransform } from "./geometry";
 
 /** 拖动时直接绘制原图取景，固定视口裁剪；最终三色像素仍由后端生成。 */

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, createId, previewRequest, renderDocument, uploadImage,
-  type DisplayDocument, type ImageAsset, type Preview } from "./api";
+  type DisplayDocument, type ImageAsset, type Preview } from "../../lib/api";
 import { placeImage } from "./geometry";
 
 type Upload = { file: File; layerId: string; epoch: number; deferPreview?: boolean };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ButtonHTMLAttributes } from "react";
-import { ScalarSpring } from "./spring";
+import { ScalarSpring } from "../../lib/spring";
 
 /** 原生按钮保留稳定点击范围，只让内层材质与文字共同压缩。 */
 export function Button({ children, className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {

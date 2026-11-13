@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ImageLayer } from "./api";
+import type { ImageLayer } from "../../lib/api";
 import { panImage } from "./geometry";
 
 const PREVIEW_INTERVAL_MS = 120;

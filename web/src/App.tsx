@@ -1,18 +1,20 @@
-import { Button } from "./Button";
+import { Button } from "./components/ui/Button";
 import { useEffect, useRef, useState } from "react";
-import { request, type Box, type Status, type ImageLayer, type Ink } from "./api";
-import { CanvasEditor, ScreenFrame } from "./CanvasEditor";
-import { useColorPicker } from "./ColorPicker";
-import { ConnectionGuide, Dialog } from "./dialogs";
-import { addText, fitBox, resizeBox } from "./geometry";
-import { Inspector } from "./Inspector";
-import { useComposer } from "./useDocumentComposer";
-import { useDeviceStatus } from "./useDeviceStatus";
-import { Icon } from "./Icon";
-import { LoadingSurface } from "./LoadingSurface";
-import { SecuritySettings } from "./SecuritySettings";
-import { CurrentDisplayViewer } from "./CurrentDisplayViewer";
-import { ShortcutGuide } from "./ShortcutGuide";
+import { request, type Box, type Status, type ImageLayer, type Ink } from "./lib/api";
+import { CanvasEditor } from "./features/editor/CanvasEditor";
+import { ScreenFrame } from "./components/ui/ScreenFrame";
+import { useColorPicker } from "./features/editor/ColorPicker";
+import { ConnectionGuide } from "./features/device/ConnectionGuide";
+import { Dialog } from "./components/ui/Dialog";
+import { addText, fitBox, resizeBox } from "./features/editor/geometry";
+import { Inspector } from "./features/editor/Inspector";
+import { useComposer } from "./features/editor/useDocumentComposer";
+import { useDeviceStatus } from "./features/device/useDeviceStatus";
+import { Icon } from "./components/ui/Icon";
+import { LoadingSurface } from "./components/ui/LoadingSurface";
+import { SecuritySettings } from "./features/security/SecuritySettings";
+import { CurrentDisplayViewer } from "./features/device/CurrentDisplayViewer";
+import { ShortcutGuide } from "./features/help/ShortcutGuide";
 
 const states: Record<string, string> = {
   queued: "已接收",
